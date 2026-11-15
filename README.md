@@ -17,7 +17,7 @@ Dev mode skips Tailscale, treats you as an admin, and serves `web/` from disk wi
 
 ## Malware scanning
 
-Uploads are scanned by ClamAV (`clamav-daemon`) through `clamdscan --fdpass`, and stay undownloadable until they come back clean. Infected uploads are deleted, kept in the list as blocked, and logged to `<data>/malware.log` for your alerting to pick up. ClamAV reads at most about 4 GB of a file, so bigger files are marked "partly scanned". Run with `-scan=false` to turn scanning off.
+Uploads are scanned by ClamAV (`clamav-daemon`) through `clamdscan --stream`, and stay undownloadable until they come back clean. Set `StreamMaxLength` (and `MaxFileSize`/`MaxScanSize`) in `clamd.conf` to about 4000M so large files are scanned. Files that fail to scan are retried when Courier restarts. Infected uploads are deleted, kept in the list as blocked, and logged to `<data>/malware.log` for your alerting to pick up. ClamAV reads at most about 4 GB of a file, so bigger files are marked "partly scanned". Run with `-scan=false` to turn scanning off.
 
 ## Deploy
 

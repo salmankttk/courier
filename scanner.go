@@ -37,9 +37,9 @@ func NewScanner(store *Store, check func(FileMeta) (string, string), onFound fun
 		s.check = func(f FileMeta) (string, string) { return s.clamScan(store.BlobPath(f.ID)) }
 	}
 	go s.run()
-	// Anything left pending from before a restart.
+	// Anything left pending from before a restart, and earlier failures.
 	for _, f := range store.List() {
-		if f.Scan == scanPending {
+		if f.Scan == scanPending || f.Scan == scanError {
 			s.Enqueue(f.ID)
 		}
 	}
@@ -73,10 +73,12 @@ func (s *Scanner) run() {
 	}
 }
 
-// clamScan runs clamdscan. --fdpass lets clamd read files it doesn't own.
+// clamScan runs clamdscan. --stream sends the bytes over clamd's socket, so
+// clamd needs no access to Courier's files: with --fdpass, AppArmor rejects
+// descriptors from Courier's sandboxed mount namespace.
 func (s *Scanner) clamScan(path string) (result, signature string) {
 	var out bytes.Buffer
-	cmd := exec.Command("clamdscan", "--no-summary", "--fdpass", "--stdout", path)
+	cmd := exec.Command("clamdscan", "--no-summary", "--stream", "--stdout", path)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	err := cmd.Run()
