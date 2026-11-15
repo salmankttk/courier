@@ -27,10 +27,15 @@ type Scanner struct {
 	store   *Store
 	queue   chan string
 	onFound func(f FileMeta, signature string)
+	check   func(f FileMeta) (result, signature string)
 }
 
-func NewScanner(store *Store, onFound func(FileMeta, string)) *Scanner {
-	s := &Scanner{store: store, queue: make(chan string, 1024), onFound: onFound}
+// NewScanner starts scanning with check, or with ClamAV when check is nil.
+func NewScanner(store *Store, check func(FileMeta) (string, string), onFound func(FileMeta, string)) *Scanner {
+	s := &Scanner{store: store, queue: make(chan string, 1024), onFound: onFound, check: check}
+	if s.check == nil {
+		s.check = func(f FileMeta) (string, string) { return s.clamScan(store.BlobPath(f.ID)) }
+	}
 	go s.run()
 	// Anything left pending from before a restart.
 	for _, f := range store.List() {
@@ -49,7 +54,7 @@ func (s *Scanner) run() {
 		if !ok {
 			continue
 		}
-		result, signature := s.scan(s.store.BlobPath(id))
+		result, signature := s.check(f)
 		if result == scanClean && f.Size > scanLimit {
 			result = scanPartial
 		}
@@ -68,8 +73,8 @@ func (s *Scanner) run() {
 	}
 }
 
-// scan runs clamdscan. --fdpass lets clamd read files it doesn't own.
-func (s *Scanner) scan(path string) (result, signature string) {
+// clamScan runs clamdscan. --fdpass lets clamd read files it doesn't own.
+func (s *Scanner) clamScan(path string) (result, signature string) {
 	var out bytes.Buffer
 	cmd := exec.Command("clamdscan", "--no-summary", "--fdpass", "--stdout", path)
 	cmd.Stdout = &out

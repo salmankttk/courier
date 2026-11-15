@@ -27,10 +27,14 @@ type App struct {
 	scanner *Scanner // nil when scanning is off
 	whois   func(*http.Request) (User, error)
 	admins  map[string]bool // logins allowed to delete anyone's files
+	static  fs.FS           // web UI files; the embedded copy unless in dev mode
 }
 
 func (a *App) Handler() http.Handler {
-	static, _ := fs.Sub(webFS, "web")
+	static := a.static
+	if static == nil {
+		static, _ = fs.Sub(webFS, "web")
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(static))
 	mux.HandleFunc("GET /api/me", a.handleMe)

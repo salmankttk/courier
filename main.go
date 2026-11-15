@@ -37,14 +37,18 @@ func main() {
 		log.Fatalf("opening store: %v", err)
 	}
 	app := &App{store: store, admins: map[string]bool{}}
-	if *scan && !scannerAvailable() {
+	var check func(FileMeta) (string, string)
+	switch {
+	case *dev != "":
+		check = fakeScan
+	case *scan && !scannerAvailable():
 		log.Printf("clamdscan not found: uploads will NOT be scanned for malware")
 		*scan = false
 	}
 	if *scan {
 		store.scanning = true
 		malwareLog := filepath.Join(*dataDir, "malware.log")
-		app.scanner = NewScanner(store, func(f FileMeta, signature string) {
+		app.scanner = NewScanner(store, check, func(f FileMeta, signature string) {
 			// One line per detection; the server's alerting picks these up.
 			line := fmt.Sprintf("%s\t%s\t%s\t%s\n", time.Now().Format(time.RFC3339), f.Uploader.Login, f.Name, signature)
 			if lf, err := os.OpenFile(malwareLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640); err == nil {
@@ -64,8 +68,9 @@ func main() {
 			return User{Login: "dev@localhost", Name: "Local Dev"}, nil
 		}
 		app.admins["dev@localhost"] = true
-		log.Printf("dev mode: http://%s", *dev)
-		log.Fatal(http.ListenAndServe(*dev, app.Handler()))
+		app.static = os.DirFS("web") // edit files and see them live
+		log.Printf("dev mode with live reload: http://%s", *dev)
+		log.Fatal(http.ListenAndServe(*dev, devHandler(app.Handler(), "web")))
 	}
 
 	if *stateDir == "" {

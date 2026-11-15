@@ -3,63 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light dark">
   <title>Courier</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="app.css">
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="backdrop" aria-hidden="true">
-    <div class="orb orb-a"></div>
-    <div class="orb orb-b"></div>
-    <div class="orb orb-c"></div>
-  </div>
-
-  <header class="toolbar glass">
+  <header class="top">
     <div class="brand">
-      <img src="icon.svg" alt="" width="28" height="28">
-      <span>Courier</span>
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="word">Courier</span>
     </div>
-    <label class="search glass-inset">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="search" type="search" placeholder="Search files" autocomplete="off">
+    <label class="search">
+      <span class="sr">Search files</span>
+      <input id="search" type="search" placeholder="Search" autocomplete="off">
     </label>
-    <div class="storage" id="storage" title="Free space on the server"></div>
+    <div class="storage" id="storage" title="Space left on the server">
+      <span class="storage-label" id="storage-label"></span>
+      <span class="meter"><i id="storage-fill"></i></span>
+    </div>
     <div class="me" id="me"></div>
+    <button class="theme" id="theme" type="button" title="Switch light / dark" aria-label="Switch light or dark mode">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z"/></svg>
+    </button>
   </header>
 
-  <main class="panel glass">
-    <section class="dropzone glass-inset" id="dropzone" tabindex="0" role="button" aria-label="Upload files">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 31V11m0 0-8 8m8-8 8 8"/><path d="M10 29v6a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-6"/></svg>
-      <div>
+  <main>
+    <section class="drop" id="dropzone" tabindex="0" role="button" aria-label="Upload files">
+      <div class="drop-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="drop-text">
         <strong>Drop files, folders or Logic projects</strong>
-        <span><u>Choose files</u> or <u id="pick-folder">a folder</u>. Everyone on Courier can download them</span>
+        <span><u>Choose files</u> / <u id="pick-folder">choose a folder</u>. Everyone on Courier can download them.</span>
       </div>
       <input id="picker" type="file" multiple hidden>
       <input id="folder-picker" type="file" webkitdirectory hidden>
     </section>
 
     <div class="list-head">
-      <h2>Shared files</h2>
+      <h2>Shared</h2>
       <span id="count"></span>
     </div>
     <ul class="files" id="files"></ul>
-    <p class="empty" id="empty" hidden>Nothing here yet. Drop something in.</p>
+    <p class="empty" id="empty" hidden>Nothing shared yet.</p>
   </main>
 
-  <aside class="uploads glass" id="uploads" hidden>
+  <aside class="uploads" id="uploads" hidden>
     <h3>Uploading</h3>
     <ul id="upload-list"></ul>
   </aside>
 
-  <div class="drag-overlay" id="drag-overlay" hidden>
-    <div class="glass drag-card">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 31V11m0 0-8 8m8-8 8 8"/><path d="M10 29v6a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-6"/></svg>
-      <strong>Drop to upload</strong>
-    </div>
-  </div>
-
-  <div class="toast glass" id="toast" role="status" hidden></div>
+  <div class="drag-frame" id="drag-overlay" hidden><span>Drop to upload</span></div>
+  <div class="toast" id="toast" role="status" hidden></div>
 </body>
 </html>

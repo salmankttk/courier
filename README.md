@@ -13,7 +13,11 @@ A shared drop box for your tailnet. Anyone you share Courier with can upload fil
 go run . -dev localhost:8080 -data ./data
 ```
 
-Dev mode skips Tailscale and treats you as an admin.
+Dev mode skips Tailscale, treats you as an admin, and serves `web/` from disk with live reload: CSS changes apply instantly and HTML/JS changes refresh the page. A fake scanner stands in for ClamAV: anything with "eicar" in its name comes back infected.
+
+## Malware scanning
+
+Uploads are scanned by ClamAV (`clamav-daemon`) through `clamdscan --fdpass`, and stay undownloadable until they come back clean. Infected uploads are deleted, kept in the list as blocked, and logged to `<data>/malware.log` for your alerting to pick up. ClamAV reads at most about 4 GB of a file, so bigger files are marked "partly scanned". Run with `-scan=false` to turn scanning off.
 
 ## Deploy
 

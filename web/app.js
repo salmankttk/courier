@@ -30,12 +30,18 @@ function label(f) {
 
 // What the scan state means for the person looking at the list.
 const SCAN = {
-  pending: { text: "Scanning…", cls: "badge-wait", blocked: true },
-  clean: { text: "Scanned", cls: "badge-ok" },
-  partial: { text: "Partly scanned", cls: "badge-warn", title: "Too big for the virus scanner to read completely; nothing was found in the part it checked." },
-  error: { text: "Scan failed", cls: "badge-bad", blocked: true },
-  infected: { text: "Blocked", cls: "badge-bad", blocked: true },
+  pending: { text: "Scanning", blocked: true },
+  clean: { text: "Clean" },
+  partial: { text: "Partly scanned", title: "Too big for the virus scanner to read completely; nothing was found in the part it checked." },
+  error: { text: "Scan failed", blocked: true },
+  infected: { text: "Blocked", blocked: true },
 };
+
+// A file's bar is 1px for a 1 KB file, growing to 10px around 50 GB.
+function sizeWeight(size) {
+  const t = (Math.log10(Math.max(size, 1)) - 3) / (10.7 - 3);
+  return `${(1 + 9 * Math.min(1, Math.max(0, t))).toFixed(2)}px`;
+}
 
 function bytes(n) {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -107,17 +113,21 @@ function row(f) {
   const mine = state.me && f.uploader.login === state.me.login;
   const scan = SCAN[f.scan];
   const del = mine || state.admin
-    ? el("button", { class: "btn btn-danger", title: "Delete", "aria-label": `Delete ${f.name}`, onclick: (e) => remove(f, e.currentTarget) }, icon(ICON_TRASH))
+    ? el("button", { class: "btn btn-ghost", title: "Delete", "aria-label": `Delete ${f.name}`, onclick: (e) => remove(f, e.currentTarget) }, icon(ICON_TRASH))
     : null;
   const get = scan?.blocked
-    ? el("span", { class: "btn btn-primary btn-disabled", "aria-disabled": "true" }, icon(ICON_DOWN), "Get")
+    ? el("span", { class: "btn btn-disabled", "aria-disabled": "true" }, icon(ICON_DOWN), "Get")
     : el("a", { class: "btn btn-primary", href: `/api/files/${f.id}`, download: f.folder ? `${f.name}.zip` : f.name, "aria-label": `Download ${f.name}` }, icon(ICON_DOWN), "Get");
   const badge = scan
-    ? el("span", { class: `badge ${scan.cls}`, title: f.scan === "infected" ? `Malware detected: ${f.threat}. The file was deleted.` : scan.title || "" }, scan.text)
+    ? el("span", { class: `state state-${f.scan}`, title: f.scan === "infected" ? `Malware detected: ${f.threat}. The file was deleted.` : scan.title || "" }, f.scan === "infected" ? `Blocked · ${f.threat}` : scan.text)
     : null;
   const details = f.folder ? `${bytes(f.size)} · ${f.count} file${f.count === 1 ? "" : "s"}` : bytes(f.size);
-  return el("li", { class: `file${f.scan === "infected" ? " file-blocked" : ""}` },
-    el("div", { class: `type type-${kind(f)}` }, label(f)),
+  const stateCls = f.scan === "infected" ? " file-blocked" : f.scan === "pending" ? " file-pending" : "";
+  const bar = el("div", { class: "weight", title: bytes(f.size) });
+  bar.style.setProperty("--size-w", sizeWeight(f.size));
+  return el("li", { class: `file${stateCls}` },
+    bar,
+    el("div", { class: `kind kind-${kind(f)}` }, label(f)),
     el("div", { class: "meta" },
       el("div", { class: "name", title: f.name }, f.name),
       el("div", { class: "sub" }, avatar(f.uploader), `${mine ? "You" : f.uploader.name || f.uploader.login} · ${ago(f.uploadedAt)}`, badge)),
@@ -129,7 +139,7 @@ async function remove(f, button) {
   // Two-step delete: first click arms the button, second click deletes.
   if (!button.classList.contains("confirm")) {
     button.classList.add("confirm");
-    button.replaceChildren("Delete?");
+    button.replaceChildren("Sure?");
     setTimeout(() => { if (button.isConnected) { button.classList.remove("confirm"); button.replaceChildren(icon(ICON_TRASH)); } }, 3000);
     return;
   }
@@ -148,7 +158,8 @@ async function refresh() {
   try {
     const [files, stats] = await Promise.all([api("/api/files"), api("/api/stats")]);
     state.files = files;
-    $("storage").textContent = `${bytes(stats.free)} free`;
+    $("storage-label").textContent = `${bytes(stats.free)} free`;
+    $("storage-fill").style.width = `${(100 * stats.used) / Math.max(1, stats.used + stats.free)}%`;
     render();
   } catch (err) {
     toast(`Can't reach Courier: ${err.message}`);
@@ -290,7 +301,22 @@ function setupDrop() {
   folderPicker.addEventListener("change", () => { folderFromPicker(folderPicker.files); folderPicker.value = ""; });
 }
 
+// Light/dark: follows the system until you pick one; the pick is remembered.
+function setupTheme() {
+  const root = document.documentElement;
+  try {
+    const saved = localStorage.getItem("courier-theme");
+    if (saved) root.dataset.theme = saved;
+  } catch {}
+  $("theme").addEventListener("click", () => {
+    const current = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    root.dataset.theme = current === "dark" ? "light" : "dark";
+    try { localStorage.setItem("courier-theme", root.dataset.theme); } catch {}
+  });
+}
+
 async function init() {
+  setupTheme();
   setupDrop();
   $("search").addEventListener("input", (e) => { state.query = e.target.value; render(); });
   try {
