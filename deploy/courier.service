@@ -1,0 +1,25 @@
+[Unit]
+Description=Courier shared drop box (tailnet only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=courier
+Group=courier
+# COURIER_ADMINS (logins allowed to delete any file) lives on the server, not in git.
+EnvironmentFile=-/etc/courier/env
+ExecStart=/usr/local/bin/courier -data /srv/courier -admins ${COURIER_ADMINS} $COURIER_FLAGS
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/courier
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

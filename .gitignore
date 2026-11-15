@@ -1,0 +1,9 @@
+# build output
+/courier
+/dist/
+
+# never commit server data or Tailscale state
+/data/
+tailscale/
+*.state
+.env
