@@ -1,45 +1,52 @@
 # Courier
 
-A shared drop box for your tailnet. Anyone you share Courier with can upload files and download what others uploaded, from any browser, with no passwords.
+**A private drop box for the people on your tailnet.**
 
-- **Tailnet-only.** Courier joins Tailscale as its own device (`courier`), so you can share just Courier with a friend without exposing the rest of your server.
-- **Knows who you are.** Tailscale tells Courier who each visitor is, so every file shows its uploader. You can delete your own files; admins can delete any.
-- **Big files.** Uploads stream straight to disk and downloads support resuming. A disk reserve stops uploads from filling the server.
-- **One binary.** The Go backend embeds the Liquid Glass web UI.
+Courier is a small web app for passing big files between friends, without upload limits, cloud storage or accounts. One person drops a file in and everyone else with access can pull it down. It runs on a machine you own and is only reachable over [Tailscale](https://tailscale.com), so the files never leave your hardware and strangers can't even find the page.
 
-## Run locally
+It was built for musicians swapping Logic Pro sessions, which are too big for email and awkward for most file-sharing tools because a `.logicx` project is a folder disguised as a file. Courier handles them as single items and they come back out intact.
+
+## How it works
+
+**It joins your tailnet as its own device.** Courier embeds Tailscale ([tsnet](https://tailscale.com/kb/1244/tsnet)), so it appears on your network as a machine called `courier` with its own HTTPS address. You share that one device with a friend, and they can reach Courier and nothing else on your network.
+
+**Tailscale is the login.** Courier asks Tailscale who each visitor is, so there are no accounts, passwords or sign-up screens. Every upload shows who it came from, people can remove what they uploaded, and admins can remove anything. A visitor Tailscale can't identify is turned away.
+
+**Files go straight to disk.** Uploads stream to disk as they arrive, so a 50 GB session needs no more memory than a 5 KB note. There is no per-file limit, only a reserve of free disk space that uploads can't use. Downloads can be resumed.
+
+**Folders stay whole.** A folder or Logic project uploads as one item and downloads as a zip built on the fly, so it takes no extra disk space. Unzipping it gives back exactly what was uploaded, hidden files and empty folders included. Browsers that zip packages themselves (Safari and other WebKit browsers) work too.
+
+**Every upload is scanned for malware.** Courier passes each upload to [ClamAV](https://www.clamav.net) and holds it back until the scan comes back clean. Anything flagged is deleted, stays in the list marked as blocked, and is logged so the server owner can be alerted. Files larger than ClamAV can read in full (about 4 GB) are marked as partly scanned.
+
+## Design
+
+The interface is monochrome, square-cornered, and built around **line weight**. Weight carries information instead of decorating:
+
+- Each file's bar is as thick as the file is big, from a hairline for a note to a heavy stroke for a session.
+- Scan states are line styles: dashed while scanning, a fine rule once clean, a heavy strike-through when blocked.
+- Things you can act on, like the drop zone, buttons and the search field, get heavier as you interact with them.
+
+It follows the system's light or dark mode, with a toggle that remembers your choice.
+
+## Under the hood
+
+A single Go binary with the web interface (plain HTML, CSS and JavaScript, no build step) embedded inside it. It has no database: metadata lives in one JSON index next to the stored files. It runs as a sandboxed systemd service under its own user.
+
+| | |
+|---|---|
+| `main.go` | flags, Tailscale (tsnet), HTTP/HTTPS listeners |
+| `server.go` | API: list, upload, download, folder zips, delete |
+| `store.go` | on-disk storage, folder uploads, disk reserve |
+| `scanner.go` | ClamAV scanning queue and quarantine |
+| `dev.go` | local dev mode: live reload and a stand-in scanner |
+| `web/` | the interface |
+| `deploy/` | systemd unit and deploy script |
+
+## Running it
 
 ```sh
-go run . -dev localhost:8080 -data ./data
+go run . -dev localhost:8080 -data ./data            # local, no Tailscale, live reload
+deploy/deploy.sh user@server                         # build for Linux and install as a service
 ```
 
-Dev mode skips Tailscale, treats you as an admin, and serves `web/` from disk with live reload: CSS changes apply instantly and HTML/JS changes refresh the page. A fake scanner stands in for ClamAV: anything with "eicar" in its name comes back infected.
-
-## Malware scanning
-
-Uploads are scanned by ClamAV (`clamav-daemon`) through `clamdscan --stream`, and stay undownloadable until they come back clean. Set `StreamMaxLength` (and `MaxFileSize`/`MaxScanSize`) in `clamd.conf` to about 4000M so large files are scanned. Files that fail to scan are retried when Courier restarts. Infected uploads are deleted, kept in the list as blocked, and logged to `<data>/malware.log` for your alerting to pick up. ClamAV reads at most about 4 GB of a file, so bigger files are marked "partly scanned". Run with `-scan=false` to turn scanning off.
-
-## Deploy
-
-```sh
-deploy/deploy.sh user@server
-```
-
-Then, on the server:
-
-1. Set the admins in `/etc/courier/env`, e.g. `COURIER_ADMINS=you@example.com`, and `sudo systemctl restart courier`.
-2. On first start Courier prints a Tailscale login link (`journalctl -u courier`). Open it to add the `courier` device to your tailnet.
-3. In the Tailscale admin console, disable key expiry for `courier`, and share it with friends (Machines → courier → Share).
-4. Optional: enable HTTPS certificates in the Tailscale admin console (DNS page) and add `-https` to `COURIER_FLAGS`.
-
-## Flags
-
-| Flag | Default | |
-|---|---|---|
-| `-data` | `/srv/courier` | where files and the index live |
-| `-hostname` | `courier` | device name on the tailnet |
-| `-admins` | | comma-separated logins that may delete any file |
-| `-reserve-gb` | `20` | disk space uploads may never use |
-| `-https` | `false` | serve HTTPS with a tailnet certificate |
-| `-port` | `41642` | UDP port for direct Tailscale connections |
-| `-dev` | | run without Tailscale on this address |
+On first start Courier prints a Tailscale login link to add itself to your tailnet. It's configured with flags: `-data`, `-hostname`, `-admins`, `-https`, `-reserve-gb`, `-scan` (see `courier -h`). Scanning expects `clamav-daemon` with `MaxFileSize`, `MaxScanSize` and `StreamMaxLength` raised to about 4000M.
