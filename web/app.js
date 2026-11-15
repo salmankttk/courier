@@ -91,7 +91,7 @@ function toast(msg) {
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.hidden = true), 3500);
+  toastTimer = setTimeout(() => (t.hidden = true), Math.max(3500, msg.length * 60)); // long hints stay up long enough to read
 }
 
 async function api(path, opts = {}) {
@@ -246,16 +246,55 @@ async function collectFolder(root) {
   return { name: root.name, files, dirs };
 }
 
+// Mac packages look like files in Finder but are folders inside. WebKit
+// browsers (Safari, Orion) hand them over as unreadable "files".
+const PACKAGES = ["logicx", "band", "app", "rtfd", "bundle", "photoslibrary", "fcpbundle", "aupreset"];
+
+function packageHint(name) {
+  return `“${name}” is a Mac package this browser can't read directly. In Finder, right-click it → Compress, then drop the .zip here.`;
+}
+
+// readable checks a File can actually be read: WebKit gives packages a File
+// object that fails as soon as you touch its bytes.
+async function readable(file) {
+  try {
+    await file.slice(0, 1).arrayBuffer();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleDrop(items) {
-  // Entries must be grabbed synchronously, before the drop event ends.
-  const entries = [...items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
-  for (const entry of entries) {
-    if (entry.isFile) {
-      upload(await new Promise((res, rej) => entry.file(res, rej)));
-    } else {
-      toast(`Reading ${entry.name}…`);
-      upload(await collectFolder(entry));
+  // Everything must be captured synchronously, before the drop event ends;
+  // WebKit invalidates the drag data afterwards.
+  const dropped = [...items]
+    .filter((i) => i.kind === "file")
+    .map((i) => ({ entry: i.webkitGetAsEntry?.(), file: i.getAsFile() }));
+
+  // Start reading every item right away, in parallel, so none goes stale
+  // while another is being processed.
+  // WebKit's isDirectory can't be trusted (it reports some .zip files as
+  // folders), so test what each item really is: if its bytes can be read,
+  // it's a file. Only unreadable items are treated as folders.
+  const jobs = dropped.map(async ({ entry, file }) => {
+    const name = entry?.name || file?.name || "item";
+    if (file && (await readable(file)) && (file.size > 0 || !entry?.isDirectory)) {
+      return { file };
     }
+    if (entry?.isDirectory) {
+      try {
+        return { folder: await collectFolder(entry) };
+      } catch {
+        // fall through to the hint below
+      }
+    }
+    return { error: PACKAGES.includes(ext(name)) || entry?.isDirectory ? packageHint(name) : `Couldn't read “${name}”.` };
+  });
+
+  for (const job of await Promise.all(jobs)) {
+    if (job.error) toast(job.error);
+    else upload(job.folder || job.file);
   }
 }
 
